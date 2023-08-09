@@ -2,16 +2,29 @@ use bytes::Bytes;
 use log::debug;
 use reqwest::{Client, IntoUrl, Method};
 
-use crate::error::{Error, ErrorKind, Result};
+use crate::{
+    error::{Error, ErrorKind, Result},
+    failed,
+};
 
+#[derive(Clone)]
 pub struct BasicCredentials {
     username: String,
     password: Option<String>,
 }
 
-impl From<(String, Option<String>)> for BasicCredentials {
-    fn from((username, password): (String, Option<String>)) -> Self {
-        Self { password, username }
+impl AsRef<BasicCredentials> for BasicCredentials {
+    fn as_ref(&self) -> &BasicCredentials {
+        &self
+    }
+}
+
+impl<U: Into<String>, P: Into<String>> From<(U, Option<P>)> for BasicCredentials {
+    fn from((username, password): (U, Option<P>)) -> Self {
+        Self {
+            password: password.map(|pass| pass.into()),
+            username: username.into(),
+        }
     }
 }
 
@@ -30,7 +43,7 @@ impl Http {
 
     const XML_CONTENT_TYPE: (&str, &str) = ("application/xml", "text/xml");
 
-    pub async fn fetch_xml<U: IntoUrl, C: Into<BasicCredentials>>(
+    pub async fn fetch_xml<U: IntoUrl, C: AsRef<BasicCredentials>>(
         &self,
         url: U,
         method: Method,
@@ -44,35 +57,39 @@ impl Http {
             .header("Content-Type", Self::XML_CONTENT_TYPE.1);
 
         if let Some(creds) = basic_creds {
-            let creds: BasicCredentials = creds.into();
+            let creds = creds.as_ref();
 
-            request = request.basic_auth(creds.username, creds.password)
+            request = request.basic_auth(&creds.username, creds.password.as_ref())
         }
 
         let response = request.send().await?;
 
-        debug!("Status: {}", response.status());
+        debug!("Status: {}", response.status(),);
 
         if !response.status().is_success() {
-            return Err(Error::new(
-                ErrorKind::InvalidHttpResponse,
-                format!("Http request returned status {}", response.status()),
-            ));
+            failed!(
+                ErrorKind::HttpRequest,
+                "Http request returned status {}",
+                response.status()
+            )
         };
 
         // Get the Content-Type header, error if it doesn't exist
         let content_type = match response.headers().get("content-type") {
-            Some(header) => header.to_str().map_err(|_| {
-                Error::new(
-                    ErrorKind::InvalidHttpResponse,
-                    "Content-Type header does not contain valid characters",
-                )
-            })?,
+            Some(header) => match header.to_str() {
+                Ok(header) => header,
+                Err(_) => {
+                    failed!(
+                        ErrorKind::HttpRequest,
+                        "Content-Type header does not contain valid characters",
+                    )
+                }
+            },
             None => {
-                return Err(Error::new(
-                    ErrorKind::InvalidHttpResponse,
+                failed!(
+                    ErrorKind::HttpRequest,
                     "Server did not include a content-type header in response",
-                ))
+                )
             }
         };
 
@@ -87,10 +104,10 @@ impl Http {
         if !(content_type.starts_with(Self::XML_CONTENT_TYPE.0)
             || content_type.starts_with(Self::XML_CONTENT_TYPE.1))
         {
-            return Err(Error::new(
-                ErrorKind::InvalidHttpResponse,
+            failed!(
+                ErrorKind::HttpRequest,
                 "Server did not respond with XML content",
-            ));
+            );
         }
 
         Ok(bytes)

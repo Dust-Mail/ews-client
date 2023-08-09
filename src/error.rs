@@ -6,8 +6,10 @@ use serde_xml_rs::Error as ParseXmlError;
 
 #[derive(Debug)]
 pub enum ErrorKind {
+    InvalidConfig,
+    InvalidRequestUrl,
     InvalidEmailAddress,
-    InvalidHttpResponse,
+    HttpRequest,
     NotFound,
     ParseXml(ParseXmlError),
     Reqwest(ReqwestError),
@@ -60,6 +62,16 @@ impl Error {
             message: message.into(),
         }
     }
+}
+
+#[macro_export]
+macro_rules! failed {
+    ($kind:expr, $($arg:tt)*) => {{
+
+        let kind = $kind;
+        let message = format!($($arg)*);
+        return Err(Error::new( kind, message ));
+    }};
 }
 
 pub type Result<T> = result::Result<T, Error>;

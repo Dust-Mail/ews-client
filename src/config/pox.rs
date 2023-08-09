@@ -3,7 +3,7 @@ use std::io::Read;
 use log::info;
 use serde::{Deserialize, Serialize};
 
-use super::Config;
+use super::{Config, ConfigResult, RedirectType};
 
 use crate::{
     constants::{DEFAULT_MICROSOFT_REQUEST_SCHEMA, DEFAULT_MICROSOFT_RESPONSE_SCHEMA},
@@ -45,6 +45,17 @@ impl Autodiscover {
         info!("{:?}", config);
 
         Ok(config)
+    }
+
+    pub fn response(&self) -> Option<&Response> {
+        for property in &self.properties {
+            match property {
+                ConfigProperty::Response(response) => return Some(response),
+                _ => {}
+            }
+        }
+
+        None
     }
 }
 
@@ -90,6 +101,19 @@ pub struct Response {
     properties: Vec<ResponseProperty>,
 }
 
+impl Response {
+    pub fn account(&self) -> Option<&Account> {
+        for property in &self.properties {
+            match property {
+                ResponseProperty::Account(account) => return Some(account),
+                _ => {}
+            }
+        }
+
+        None
+    }
+}
+
 #[derive(Serialize, Deserialize, Debug)]
 #[serde(rename_all = "PascalCase")]
 pub enum ResponseProperty {
@@ -109,6 +133,41 @@ pub struct User {
 pub struct Account {
     #[serde(rename = "$value")]
     properties: Vec<AccountProperty>,
+}
+
+impl Account {
+    pub fn action_type(&self) -> Option<&Action> {
+        for property in &self.properties {
+            match property {
+                AccountProperty::Action(action) => return Some(action),
+                _ => {}
+            }
+        }
+
+        None
+    }
+
+    pub fn redirect_addr(&self) -> Option<&str> {
+        for property in &self.properties {
+            match property {
+                AccountProperty::RedirectAddr(addr) => return Some(addr),
+                _ => {}
+            }
+        }
+
+        None
+    }
+
+    pub fn redirect_url(&self) -> Option<&str> {
+        for property in &self.properties {
+            match property {
+                AccountProperty::RedirectUrl(url) => return Some(url),
+                _ => {}
+            }
+        }
+
+        None
+    }
 }
 
 #[derive(Serialize, Deserialize, Debug)]
@@ -223,8 +282,42 @@ pub enum Encryption {
     Ssl,
 }
 
-impl Into<Config> for Autodiscover {
-    fn into(self) -> Config {
-        super::Config {}
+impl Into<ConfigResult> for Autodiscover {
+    fn into(self) -> ConfigResult {
+        if let Some(response) = self.response() {
+            if let Some(account) = response.account() {
+                if let Some(action_type) = account.action_type() {
+                    let redirect_type = match action_type {
+                        Action::RedirectAddr => match account.redirect_addr() {
+                            Some(addr) => Some(RedirectType::Email(addr.to_string())),
+                            None => {
+                                return ConfigResult::error(
+                                    "Missing redirect address when it should be available",
+                                )
+                            }
+                        },
+                        Action::RedirectUrl => match account.redirect_url() {
+                            Some(url) => Some(RedirectType::Url(url.to_string())),
+                            None => {
+                                return ConfigResult::error(
+                                    "Missing redirect url when it should be available",
+                                )
+                            }
+                        },
+                        _ => None,
+                    };
+
+                    if let Some(redirect) = redirect_type {
+                        return ConfigResult::Redirect(redirect);
+                    }
+                }
+            }
+
+            return ConfigResult::Ok(Config {});
+        }
+
+        ConfigResult::Error(super::Error {
+            message: String::new(),
+        })
     }
 }

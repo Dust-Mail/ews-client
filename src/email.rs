@@ -1,42 +1,40 @@
-use std::io;
+use futures::future::join_all;
 
 use log::warn;
-use reqwest::Method;
 use validator::validate_email;
 
 use crate::{
     candidate::CandidateType,
+    client::Client,
     config::Config,
     // ldap::Ldap,
     error::{Error, ErrorKind, Result},
-    http::Http,
+    failed,
 };
 
 const INVALID_EMAIL_MESSAGE: &str = "The given email address is invalid";
 
 fn domain_from_email<E: AsRef<str>>(email: E) -> Result<String> {
     if !validate_email(email.as_ref()) {
-        return Err(Error::new(
-            ErrorKind::InvalidEmailAddress,
-            INVALID_EMAIL_MESSAGE,
-        ));
+        failed!(ErrorKind::InvalidEmailAddress, "{}", INVALID_EMAIL_MESSAGE);
     };
 
     let mut email_split = email.as_ref().split('@');
 
     email_split.next();
 
-    let domain = email_split.next().ok_or(Error::new(
-        ErrorKind::InvalidEmailAddress,
-        INVALID_EMAIL_MESSAGE,
-    ))?;
+    let domain = match email_split.next() {
+        Some(domain) => domain,
+        None => failed!(ErrorKind::InvalidEmailAddress, "{}", INVALID_EMAIL_MESSAGE),
+    };
 
     Ok(domain.to_string())
 }
 
-pub async fn from_email<E: AsRef<str>, P: AsRef<str>>(
+pub async fn from_email<E: AsRef<str>, P: AsRef<str>, U: AsRef<str>>(
     email: E,
     password: Option<P>,
+    username: Option<U>,
 ) -> Result<Config> {
     let domain = domain_from_email(email.as_ref())?;
 
@@ -69,41 +67,37 @@ pub async fn from_email<E: AsRef<str>, P: AsRef<str>>(
 
     // candidates.append(&mut scp_urls);
 
-    let http = Http::new()?;
+    let creds = (
+        username
+            .as_ref()
+            .map(|username| username.as_ref())
+            .unwrap_or(email.as_ref()),
+        password.as_ref().map(|pass| pass.as_ref()),
+    );
+
+    let client = Client::new(creds)?;
+
+    let mut requests = Vec::new();
 
     for candidate in candidates {
-        if let Some(candidate_type) = CandidateType::from_url(&candidate) {
-            let creds: (String, Option<String>) = (
-                email.as_ref().into(),
-                password.as_ref().map(|password| password.as_ref().into()),
-            );
+        let request = client.send_authenticated((candidate, email.as_ref()));
 
-            let body = candidate_type.create_request_body(email.as_ref())?;
+        requests.push(request);
+    }
 
-            match http
-                .fetch_xml(&candidate, Method::POST, body, Some(creds))
-                .await
-            {
-                Ok(bytes) => {
-                    let reader = io::Cursor::new(bytes);
+    let results = join_all(requests).await;
 
-                    let config = candidate_type.parse_config(reader)?;
-
-                    return Ok(config);
-                }
-                Err(err) => {
-                    warn!("Error fetching {}: {:?}", candidate, err)
-                }
-            }
-        } else {
-            warn!("Url does not have a recognizable extension")
+    for result in results {
+        match result {
+            Ok(config) => return Ok(config),
+            Err(error) => warn!("{:?}", error),
         }
     }
 
-    Err(Error::new(
+    failed!(
         ErrorKind::NotFound,
         "Could not find any config for that email address",
-    ))
+    )
 }
 
 #[cfg(test)]
@@ -132,8 +126,12 @@ mod test {
         env_logger::init();
         dotenv::dotenv().unwrap();
 
-        from_email(env::var("USERNAME").unwrap(), env::var("PASSWORD").ok())
-            .await
-            .unwrap();
+        from_email(
+            env::var("USERNAME").unwrap(),
+            env::var("PASSWORD").ok(),
+            env::var("USERNAME").ok(),
+        )
+        .await
+        .unwrap();
     }
 }

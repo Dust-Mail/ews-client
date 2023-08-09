@@ -1,4 +1,8 @@
-use std::{fmt::Display, io::Read, path::Path};
+use std::{
+    fmt::Display,
+    io::{self},
+    path::Path,
+};
 
 use bytes::Bytes;
 use log::info;
@@ -7,7 +11,7 @@ use reqwest::IntoUrl;
 use crate::{
     config::{
         // SoapConfig
-        Config,
+        ConfigResult,
         PoxAutodiscover,
     },
     error::Result,
@@ -70,10 +74,12 @@ impl CandidateType {
         }
     }
 
-    pub fn parse_config<R: Read>(&self, xml: R) -> Result<Config> {
+    pub fn parse_config<B: AsRef<[u8]>>(&self, bytes: B) -> Result<ConfigResult> {
+        let reader = io::Cursor::new(bytes);
+
         match &self {
             CandidateType::POX => {
-                let config = PoxAutodiscover::from_xml(xml)?;
+                let config = PoxAutodiscover::from_xml(reader)?;
 
                 Ok(config.into())
             } // CandidateType::SOAP => {

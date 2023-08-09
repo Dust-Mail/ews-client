@@ -1,4 +1,5 @@
 mod candidate;
+mod client;
 mod config;
 mod constants;
 mod email;
