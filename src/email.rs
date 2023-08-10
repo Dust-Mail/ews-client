@@ -6,7 +6,7 @@ use validator::validate_email;
 use crate::{
     client::Client,
     // ldap::Ldap,
-    error::{ErrorKind, Result},
+    error::{Error, ErrorKind, Result},
     failed,
     types::{protocol::Protocol, request::AutodiscoverRequest, response::AutodiscoverResponse},
 };
@@ -99,11 +99,17 @@ pub async fn from_email<E: AsRef<str>, P: AsRef<str>, U: AsRef<str>>(
 
     let results = join_all(requests).await;
 
+    let mut errors: Vec<Error> = Vec::new();
+
     // If any of the urls are a hit, we return it.
     for result in results {
         match result {
             Ok(config) => return Ok(config),
-            Err(error) => warn!("{:?}", error),
+            Err(error) => {
+                warn!("{:?}", error);
+
+                errors.push(error);
+            }
         }
     }
 
@@ -120,7 +126,10 @@ pub async fn from_email<E: AsRef<str>, P: AsRef<str>, U: AsRef<str>>(
 
     match response {
         Ok(config) => return Ok(config),
-        Err(error) => warn!("{:?}", error),
+        Err(error) => {
+            warn!("{:?}", error);
+            errors.push(error);
+        }
     };
 
     // Finally, if all else failed, we try a dns query to try and resolve a domain from there.
@@ -143,15 +152,21 @@ pub async fn from_email<E: AsRef<str>, P: AsRef<str>, U: AsRef<str>>(
 
             match response {
                 Ok(config) => return Ok(config),
-                Err(error) => warn!("{:?}", error),
+                Err(error) => {
+                    warn!("{:?}", error);
+                    errors.push(error)
+                }
             };
         }
-        Err(error) => warn!("{:?}", error),
+        Err(error) => {
+            warn!("{:?}", error);
+            errors.push(error)
+        }
     };
 
     // If nothing return a valid configuration, we return an error.
     failed!(
-        ErrorKind::NotFound,
+        ErrorKind::ConfigNotFound(errors),
         "Could not find any config for that email address",
     )
 }
