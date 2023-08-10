@@ -3,7 +3,7 @@ use log::debug;
 use reqwest::{Client, IntoUrl, Method};
 
 use crate::{
-    error::{Error, ErrorKind, Result},
+    error::{ErrorKind, Result},
     failed,
 };
 

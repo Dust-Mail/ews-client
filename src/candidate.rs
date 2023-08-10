@@ -5,7 +5,7 @@ use std::{
 };
 
 use bytes::Bytes;
-use log::info;
+use log::debug;
 use reqwest::IntoUrl;
 
 use crate::{
@@ -67,7 +67,7 @@ impl CandidateType {
 
                 let config_string = serde_xml_rs::to_string(&request_config)?;
 
-                info!("{}", config_string);
+                debug!("Request configuration: {}", config_string);
 
                 Ok(config_string.into())
             }
