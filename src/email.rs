@@ -4,12 +4,11 @@ use log::warn;
 use validator::validate_email;
 
 use crate::{
-    candidate::CandidateType,
     client::{AutodiscoverRequest, Client},
-    config::Config,
     // ldap::Ldap,
     error::{ErrorKind, Result},
     failed,
+    types::{candidate::CandidateType, AutodiscoverResponse},
 };
 
 const INVALID_EMAIL_MESSAGE: &str = "The given email address is invalid";
@@ -41,7 +40,7 @@ pub async fn from_email<E: AsRef<str>, P: AsRef<str>, U: AsRef<str>>(
     email: E,
     password: Option<P>,
     username: Option<U>,
-) -> Result<Config> {
+) -> Result<AutodiscoverResponse> {
     let domain = domain_from_email(email.as_ref())?;
 
     // In this function we follow the steps to autodiscovery as specified by the following:
@@ -184,7 +183,7 @@ mod test {
         dotenv::dotenv().unwrap();
 
         from_email(
-            env::var("USERNAME").unwrap(),
+            env::var("EMAIL").unwrap(),
             env::var("PASSWORD").ok(),
             env::var("USERNAME").ok(),
         )

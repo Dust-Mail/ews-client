@@ -1,12 +1,13 @@
-mod pox;
+pub mod candidate;
+pub mod pox;
 // mod soap;
 
-use derive_getters::Getters;
-pub use pox::Autodiscover as PoxAutodiscover;
 // pub use soap::SoapConfig;
+pub use pox::Autodiscover as PoxAutodiscover;
+use pox::Response as PoxResponse;
 
 pub enum ConfigResult {
-    Ok(Config),
+    Ok(AutodiscoverResponse),
     Redirect(RedirectType),
     Error(Error),
 }
@@ -34,10 +35,7 @@ impl Error {
     }
 }
 
-#[derive(Debug, Getters)]
-pub struct Config {}
-
-#[derive(Debug, Getters)]
-pub struct User {
-    display_name: String,
+#[derive(Debug)]
+pub enum AutodiscoverResponse {
+    Pox(PoxResponse),
 }

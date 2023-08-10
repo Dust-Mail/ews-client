@@ -9,12 +9,12 @@ use log::debug;
 use reqwest::IntoUrl;
 
 use crate::{
-    config::{
+    error::Result,
+    types::{
         // SoapConfig
         ConfigResult,
         PoxAutodiscover,
     },
-    error::Result,
 };
 
 pub enum CandidateType {

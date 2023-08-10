@@ -1,9 +1,8 @@
 use std::io::Read;
 
-use log::info;
 use serde::{Deserialize, Serialize};
 
-use super::{Config, ConfigResult, RedirectType};
+use super::{AutodiscoverResponse, ConfigResult, RedirectType};
 
 use crate::{
     constants::{DEFAULT_MICROSOFT_REQUEST_SCHEMA, DEFAULT_MICROSOFT_RESPONSE_SCHEMA},
@@ -19,7 +18,7 @@ pub struct Error {
 }
 
 #[derive(Serialize, Deserialize, Debug)]
-/// The config following Microsofts spec: https://learn.microsoft.com/en-us/exchange/client-developer/web-service-reference/autodiscover-pox
+/// Config follows Microsofts spec: https://learn.microsoft.com/en-us/exchange/client-developer/web-service-reference/autodiscover-pox
 pub struct Autodiscover {
     #[serde(rename(serialize = "@xmlns"), skip_deserializing)]
     xmlns: String,
@@ -42,13 +41,13 @@ impl Autodiscover {
     pub fn from_xml<R: Read>(xml: R) -> Result<Self> {
         let config: Self = serde_xml_rs::from_reader(xml)?;
 
-        info!("{:?}", config);
+        // info!("{:?}", config);
 
         Ok(config)
     }
 
-    pub fn response(&self) -> Option<&Response> {
-        for property in &self.properties {
+    fn into_response(self) -> Option<Response> {
+        for property in self.properties {
             match property {
                 ConfigProperty::Response(response) => return Some(response),
                 _ => {}
@@ -91,7 +90,7 @@ impl Request {
 pub enum RequestProperty {
     EMailAddress(String),
     AcceptableResponseSchema(String),
-    LegacyDN(String),
+    LegacyDN(LegacyDN),
 }
 
 #[derive(Serialize, Deserialize, Debug)]
@@ -125,8 +124,20 @@ pub enum ResponseProperty {
 #[derive(Serialize, Deserialize, Debug)]
 #[serde(rename_all = "PascalCase")]
 pub struct User {
-    display_name: String,
+    #[serde(rename = "$value")]
+    properties: Vec<UserProperty>,
 }
+
+#[derive(Serialize, Deserialize, Debug)]
+pub enum UserProperty {
+    DisplayName(String),
+    LegacyDN(LegacyDN),
+    DeploymentId(String),
+    AutoDiscoverSMTPAddress(String),
+}
+
+#[derive(Serialize, Deserialize, Debug)]
+pub struct LegacyDN(String);
 
 #[derive(Serialize, Deserialize, Debug)]
 #[serde(rename_all = "PascalCase")]
@@ -175,13 +186,13 @@ impl Account {
 pub enum AccountProperty {
     AccountType(AccountType),
     Action(Action),
-    MicrosoftOnline,
+    MicrosoftOnline(bool),
     RedirectUrl(String),
     RedirectAddr(String),
     Image(String),
     ServiceHome(String),
     Protocol(Protocol),
-    // PublicFolderInformation(PublicFolderInformation),
+    PublicFolderInformation(PublicFolderInformation),
     Error(Error),
 }
 
@@ -219,24 +230,32 @@ pub enum ProtocolProperty {
     ServerVersion(String),
     MdbDN(String),
     PublicFolderServer(String),
-    Port(usize),
-    DirectoryPort(usize),
-    ReferralPort(usize),
+    Port(u16),
+    DirectoryPort(u16),
+    ReferralPort(u16),
     ASUrl(String),
     EwsUrl(String),
     SharingUrl(String),
     EmwsUrl(String),
+    OOFUrl(String),
+    OABUrl(String),
+    UMUrl(String),
+    EwsPartnerUrl(String),
     LoginName(String),
     DomainRequired(OnOff),
     DomainName(String),
-    CertPrincipalName(String),
     #[serde(rename = "SPA")]
     Spa(OnOff),
-    AuthRequired(OnOff),
+    AuthPackage(AuthPackage),
+    CertPrincipalName(String),
     #[serde(rename = "SSL")]
     Ssl(OnOff),
+    AuthRequired(OnOff),
     UsePOPAuth(OnOff),
     SMTPLast(OnOff),
+    NetworkRequirements(NetworkRequirements),
+    AddressBook(AddressBook),
+    MailStore(MailStore),
     Encryption(Encryption),
 }
 
@@ -282,9 +301,53 @@ pub enum Encryption {
     Ssl,
 }
 
+#[derive(Serialize, Deserialize, Debug)]
+#[serde(rename_all = "lowercase")]
+pub enum AuthPackage {
+    Basic,
+    Kerb,
+    KerbNtlm,
+    Ntlm,
+    Certificate,
+    Negotiate,
+    Nego2,
+}
+
+#[derive(Serialize, Deserialize, Debug)]
+#[serde(rename_all = "PascalCase")]
+pub struct PublicFolderInformation {
+    smtp_address: String,
+}
+
+#[derive(Serialize, Deserialize, Debug)]
+#[serde(rename_all = "PascalCase")]
+pub struct AddressBook {
+    external_url: String,
+    interal_url: String,
+}
+
+#[derive(Serialize, Deserialize, Debug)]
+#[serde(rename_all = "PascalCase")]
+pub struct MailStore {
+    external_url: String,
+    interal_url: String,
+}
+
+#[derive(Serialize, Deserialize, Debug)]
+pub struct NetworkRequirements {
+    #[serde(rename = "Ipv4Start")]
+    ipv4_start: String,
+    #[serde(rename = "Ipv4End")]
+    ipv4_end: String,
+    #[serde(rename = "Ipv6Start")]
+    ipv6_start: String,
+    #[serde(rename = "Ipv6end")]
+    ipv6_end: String,
+}
+
 impl Into<ConfigResult> for Autodiscover {
     fn into(self) -> ConfigResult {
-        if let Some(response) = self.response() {
+        if let Some(response) = self.into_response() {
             if let Some(account) = response.account() {
                 if let Some(action_type) = account.action_type() {
                     let redirect_type = match action_type {
@@ -313,7 +376,7 @@ impl Into<ConfigResult> for Autodiscover {
                 }
             }
 
-            return ConfigResult::Ok(Config {});
+            return ConfigResult::Ok(AutodiscoverResponse::Pox(response));
         }
 
         ConfigResult::Error(super::Error {

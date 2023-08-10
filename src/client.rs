@@ -3,12 +3,11 @@ use reqwest::Method;
 use async_recursion::async_recursion;
 
 use crate::{
-    candidate::CandidateType,
-    config::{Config, ConfigResult, RedirectType},
     dns::Dns,
     error::{ErrorKind, Result},
     failed,
     http::{BasicCredentials, Http},
+    types::{candidate::CandidateType, AutodiscoverResponse, ConfigResult, RedirectType},
 };
 
 pub struct Client {
@@ -59,7 +58,7 @@ impl Client {
         &self,
         result: ConfigResult,
         mut request: AutodiscoverRequest,
-    ) -> Result<Config> {
+    ) -> Result<AutodiscoverResponse> {
         match result {
             ConfigResult::Ok(config) => Ok(config),
             ConfigResult::Error(error) => failed!(
@@ -95,7 +94,7 @@ impl Client {
     pub async fn send_request<R: Into<AutodiscoverRequest> + Send>(
         &self,
         request: R,
-    ) -> Result<Config> {
+    ) -> Result<AutodiscoverResponse> {
         let request: AutodiscoverRequest = request.into();
 
         let url = &request.url;
