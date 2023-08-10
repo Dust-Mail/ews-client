@@ -1,6 +1,5 @@
 use std::{fmt::Display, io::Error as IoError, result};
 
-use ldap3::LdapError;
 use reqwest::Error as ReqwestError;
 use serde_xml_rs::Error as ParseXmlError;
 use trust_dns_resolver::error::ResolveError;
@@ -17,7 +16,6 @@ pub enum ErrorKind {
     ParseXml(ParseXmlError),
     Reqwest(ReqwestError),
     Io(IoError),
-    Ldap(LdapError),
 }
 
 #[derive(Debug)]
@@ -29,15 +27,6 @@ pub struct Error {
 impl Display for Error {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         write!(f, "Error: {}", self.message)
-    }
-}
-
-impl From<LdapError> for Error {
-    fn from(error: LdapError) -> Self {
-        Error::new(
-            ErrorKind::Ldap(error),
-            "An error with occurred in the LDAP communication",
-        )
     }
 }
 
