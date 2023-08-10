@@ -1,8 +1,9 @@
-use std::{fmt::Display, result};
+use std::{fmt::Display, io::Error as IoError, result};
 
 use ldap3::LdapError;
 use reqwest::Error as ReqwestError;
 use serde_xml_rs::Error as ParseXmlError;
+use trust_dns_resolver::error::ResolveError;
 
 #[derive(Debug)]
 pub enum ErrorKind {
@@ -11,8 +12,10 @@ pub enum ErrorKind {
     InvalidEmailAddress,
     HttpRequest,
     NotFound,
+    Resolve(ResolveError),
     ParseXml(ParseXmlError),
     Reqwest(ReqwestError),
+    Io(IoError),
     Ldap(LdapError),
 }
 
@@ -50,7 +53,22 @@ impl From<ParseXmlError> for Error {
     fn from(error: ParseXmlError) -> Self {
         Error::new(
             ErrorKind::ParseXml(error),
-            "An error while parse the XML response",
+            "An error while parsing the XML response",
+        )
+    }
+}
+
+impl From<IoError> for Error {
+    fn from(error: IoError) -> Self {
+        Error::new(ErrorKind::Io(error), "An error occurred in an io process")
+    }
+}
+
+impl From<ResolveError> for Error {
+    fn from(error: ResolveError) -> Self {
+        Error::new(
+            ErrorKind::Resolve(error),
+            "An error occurred while resolving a dns query",
         )
     }
 }
@@ -67,6 +85,7 @@ impl Error {
 #[macro_export]
 macro_rules! failed {
     ($kind:expr, $($arg:tt)*) => {{
+		use crate::error::Error;
 
         let kind = $kind;
         let message = format!($($arg)*);

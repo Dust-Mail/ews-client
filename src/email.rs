@@ -5,10 +5,10 @@ use validator::validate_email;
 
 use crate::{
     candidate::CandidateType,
-    client::Client,
+    client::{AutodiscoverRequest, Client},
     config::Config,
     // ldap::Ldap,
-    error::{Error, ErrorKind, Result},
+    error::{ErrorKind, Result},
     failed,
 };
 
@@ -80,9 +80,11 @@ pub async fn from_email<E: AsRef<str>, P: AsRef<str>, U: AsRef<str>>(
     let mut requests = Vec::new();
 
     for candidate in candidates {
-        let request = client.send_authenticated((candidate, email.as_ref()));
+        let request = AutodiscoverRequest::new(candidate, email.as_ref(), true);
 
-        requests.push(request);
+        let future = client.send_request(request);
+
+        requests.push(future);
     }
 
     let results = join_all(requests).await;
@@ -93,6 +95,45 @@ pub async fn from_email<E: AsRef<str>, P: AsRef<str>, U: AsRef<str>>(
             Err(error) => warn!("{:?}", error),
         }
     }
+
+    let candidate = format!(
+        "http://autodiscover.{}/autodiscover/autodiscover.{}",
+        domain,
+        CandidateType::POX
+    );
+
+    let request = AutodiscoverRequest::new(candidate, email.as_ref(), false);
+
+    let response = client.send_request(request).await;
+
+    match response {
+        Ok(config) => return Ok(config),
+        Err(error) => warn!("{:?}", error),
+    };
+
+    // Finally, we try a dns query to try and resolve a domain from there.
+    match client
+        .dns_query(format!("_autodiscover._tcp.{}", domain))
+        .await
+    {
+        Ok(autodiscover_domain) => {
+            let candidate = format!(
+                "https://{}/autodiscover/autodiscover.{}",
+                autodiscover_domain,
+                CandidateType::POX
+            );
+
+            let request = AutodiscoverRequest::new(candidate, email.as_ref(), true);
+
+            let response = client.send_request(request).await;
+
+            match response {
+                Ok(config) => return Ok(config),
+                Err(error) => warn!("{:?}", error),
+            };
+        }
+        Err(error) => warn!("{:?}", error),
+    };
 
     failed!(
         ErrorKind::NotFound,
