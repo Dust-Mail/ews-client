@@ -5,7 +5,6 @@ use validator::validate_email;
 
 use crate::{
     client::Client,
-    // ldap::Ldap,
     error::{Error, ErrorKind, Result},
     failed,
     types::{protocol::Protocol, request::AutodiscoverRequest, response::AutodiscoverResponse},
@@ -69,12 +68,6 @@ pub async fn from_email<E: AsRef<str>, P: AsRef<str>, U: AsRef<str>>(
             Protocol::POX
         ),
     ];
-
-    // let ldap = Ldap::new::<String>(None);
-
-    // let mut scp_urls = ldap.get_scp_urls(domain).await?;
-
-    // candidates.append(&mut scp_urls);
 
     let creds = (
         username
