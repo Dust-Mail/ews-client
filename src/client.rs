@@ -71,14 +71,14 @@ impl Client {
                 match redirect_type {
                     RedirectType::Email(email_addr) => {
                         if email_addr == request.email {
-                            failed!(ErrorKind::InvalidConfig, "The returned config redirects us to the same email address as we are already requesting");
+                            failed!(ErrorKind::InvalidConfig, "The returned config redirects us to the same email address that we are already requesting");
                         }
 
                         request.set_email(email_addr);
                     }
                     RedirectType::Url(url) => {
                         if url == request.url {
-                            failed!(ErrorKind::InvalidConfig, "The returned config redirects us to the same url as we are already requesting");
+                            failed!(ErrorKind::InvalidConfig, "The returned config redirects us to the same url that we are already requesting");
                         }
 
                         request.set_url(url);
@@ -91,6 +91,7 @@ impl Client {
     }
 
     #[async_recursion]
+    /// Send an autodiscover request to an Exchange server.
     pub async fn send_request<R: Into<AutodiscoverRequest> + Send>(
         &self,
         request: R,
@@ -135,11 +136,11 @@ impl Client {
         }
     }
 
-    pub async fn dns_query<D: AsRef<str>>(&self, domain: D) -> Result<String> {
-        let srv_lookup = self.dns.srv_lookup(domain).await?;
+    pub async fn dns_query<D: AsRef<str>>(&self, domain: D) -> Result<(String, u16)> {
+        let (fqdn, port) = self.dns.srv_lookup(domain).await?;
 
-        let domain_name = srv_lookup.trim_end_matches('.').to_string();
+        let domain_name = fqdn.trim_end_matches('.').to_string();
 
-        Ok(domain_name)
+        Ok((domain_name, port))
     }
 }

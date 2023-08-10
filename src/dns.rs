@@ -55,6 +55,7 @@ impl PartialEq for WeightedSrvRecord {
     }
 }
 
+/// A DNS client, simplified to easily lookup SRV records
 pub struct Dns {
     resolver: TokioAsyncResolver,
 }
@@ -68,7 +69,10 @@ impl Dns {
         Ok(dns)
     }
 
-    pub async fn srv_lookup<D: AsRef<str>>(&self, domain: D) -> Result<String> {
+    /// Lookup an SRV record for a given domain.
+    ///
+    /// Returns the record with the highest priority and weight.
+    pub async fn srv_lookup<D: AsRef<str>>(&self, domain: D) -> Result<(String, u16)> {
         let records = self.resolver.srv_lookup(domain.as_ref()).await?;
 
         let mut weighted_records: Vec<_> =
@@ -77,7 +81,7 @@ impl Dns {
         weighted_records.sort();
 
         if let Some(record) = weighted_records.first() {
-            return Ok(record.record.target().to_string());
+            return Ok((record.record.target().to_string(), record.record.port()));
         }
 
         failed!(

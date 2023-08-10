@@ -29,6 +29,7 @@ impl Display for CandidateType {
 }
 
 impl CandidateType {
+    /// Create the corresponding file extension for the current protocol.
     pub fn file_extension(&self) -> String {
         let ext = match self {
             CandidateType::POX => "xml",
@@ -38,6 +39,7 @@ impl CandidateType {
         ext.to_string()
     }
 
+    /// Detects the protocol from a given url.
     pub fn from_url<U: IntoUrl>(url: U) -> Option<Self> {
         let url = url.into_url().ok()?;
 

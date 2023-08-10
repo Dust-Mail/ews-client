@@ -14,6 +14,9 @@ use crate::{
 
 const INVALID_EMAIL_MESSAGE: &str = "The given email address is invalid";
 
+/// Parse the domain name from an email address.
+///
+/// Also validates that the given string is an email address.
 fn domain_from_email<E: AsRef<str>>(email: E) -> Result<String> {
     if !validate_email(email.as_ref()) {
         failed!(ErrorKind::InvalidEmailAddress, "{}", INVALID_EMAIL_MESSAGE);
@@ -31,6 +34,9 @@ fn domain_from_email<E: AsRef<str>>(email: E) -> Result<String> {
     Ok(domain.to_string())
 }
 
+/// Fetch an autodiscover config from a given email address and password.
+///
+/// Optionally, a different username can be used to login to the exchange server, otherwise, the specified email address will be used.
 pub async fn from_email<E: AsRef<str>, P: AsRef<str>, U: AsRef<str>>(
     email: E,
     password: Option<P>,
@@ -38,6 +44,10 @@ pub async fn from_email<E: AsRef<str>, P: AsRef<str>, U: AsRef<str>>(
 ) -> Result<Config> {
     let domain = domain_from_email(email.as_ref())?;
 
+    // In this function we follow the steps to autodiscovery as specified by the following:
+    // https://learn.microsoft.com/en-us/exchange/client-developer/exchange-web-services/autodiscover-for-exchange
+
+    // We initialize our candidates with the basic links.
     let candidates: Vec<String> = vec![
         // format!(
         //     "https://autodiscover.{}/autodiscover/autodiscover.{}",
@@ -82,6 +92,7 @@ pub async fn from_email<E: AsRef<str>, P: AsRef<str>, U: AsRef<str>>(
     for candidate in candidates {
         let request = AutodiscoverRequest::new(candidate, email.as_ref(), true);
 
+        // We then send an authenticated request to each candidate.
         let future = client.send_request(request);
 
         requests.push(future);
@@ -89,6 +100,7 @@ pub async fn from_email<E: AsRef<str>, P: AsRef<str>, U: AsRef<str>>(
 
     let results = join_all(requests).await;
 
+    // If any of the urls are a hit, we return it.
     for result in results {
         match result {
             Ok(config) => return Ok(config),
@@ -96,6 +108,7 @@ pub async fn from_email<E: AsRef<str>, P: AsRef<str>, U: AsRef<str>>(
         }
     }
 
+    // Otherwise, we try the backup candidate with an unauthenticated request.
     let candidate = format!(
         "http://autodiscover.{}/autodiscover/autodiscover.{}",
         domain,
@@ -111,20 +124,22 @@ pub async fn from_email<E: AsRef<str>, P: AsRef<str>, U: AsRef<str>>(
         Err(error) => warn!("{:?}", error),
     };
 
-    // Finally, we try a dns query to try and resolve a domain from there.
+    // Finally, if all else failed, we try a dns query to try and resolve a domain from there.
     match client
         .dns_query(format!("_autodiscover._tcp.{}", domain))
         .await
     {
-        Ok(autodiscover_domain) => {
+        Ok((autodiscover_domain, autodiscover_port)) => {
             let candidate = format!(
-                "https://{}/autodiscover/autodiscover.{}",
+                "https://{}:{}/autodiscover/autodiscover.{}",
                 autodiscover_domain,
+                autodiscover_port,
                 CandidateType::POX
             );
 
             let request = AutodiscoverRequest::new(candidate, email.as_ref(), true);
 
+            // We send an authenticated request.
             let response = client.send_request(request).await;
 
             match response {
@@ -135,6 +150,7 @@ pub async fn from_email<E: AsRef<str>, P: AsRef<str>, U: AsRef<str>>(
         Err(error) => warn!("{:?}", error),
     };
 
+    // If nothing return a valid configuration, we return an error.
     failed!(
         ErrorKind::NotFound,
         "Could not find any config for that email address",

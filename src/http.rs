@@ -8,6 +8,7 @@ use crate::{
 };
 
 #[derive(Clone)]
+/// Credentials used for HTTP Basic auth
 pub struct BasicCredentials {
     username: String,
     password: Option<String>,
@@ -28,6 +29,7 @@ impl<U: Into<String>, P: Into<String>> From<(U, Option<P>)> for BasicCredentials
     }
 }
 
+/// A simple HTTP client to fetch XML content
 pub struct Http {
     client: Client,
 }
@@ -43,6 +45,9 @@ impl Http {
 
     const XML_CONTENT_TYPE: (&str, &str) = ("application/xml", "text/xml");
 
+    /// Fetch XML data over HTTP given the url, method, body and optionally basic auth credentials.
+    ///
+    /// The server must respond with a Content-Type that corresponds with XML data.
     pub async fn fetch_xml<U: IntoUrl, C: AsRef<BasicCredentials>>(
         &self,
         url: U,
