@@ -15,7 +15,11 @@ extern crate ms_autodiscover;
 async fn main() {
     let config = ms_autodiscover::from_email("user@contoso.com", "example_password", None::<String>).await.unwrap();
 
-    println!("{}", config.user().name())
+    match config {
+		AutodiscoverResponse::Pox(response) => {
+			println!("{}", response.user().display_name())
+		}
+	}
 
     // Example output:
     // "Contoso"
