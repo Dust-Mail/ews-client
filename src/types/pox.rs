@@ -2,7 +2,7 @@ use std::io::Read;
 
 use serde::{Deserialize, Serialize};
 
-use super::{AutodiscoverResponse, ConfigResult, RedirectType};
+use super::response::{AutodiscoverResponse, AutodiscoverResult, RedirectType};
 
 use crate::{
     constants::{DEFAULT_MICROSOFT_REQUEST_SCHEMA, DEFAULT_MICROSOFT_RESPONSE_SCHEMA},
@@ -345,8 +345,8 @@ pub struct NetworkRequirements {
     ipv6_end: String,
 }
 
-impl Into<ConfigResult> for Autodiscover {
-    fn into(self) -> ConfigResult {
+impl Into<AutodiscoverResult> for Autodiscover {
+    fn into(self) -> AutodiscoverResult {
         if let Some(response) = self.into_response() {
             if let Some(account) = response.account() {
                 if let Some(action_type) = account.action_type() {
@@ -354,7 +354,7 @@ impl Into<ConfigResult> for Autodiscover {
                         Action::RedirectAddr => match account.redirect_addr() {
                             Some(addr) => Some(RedirectType::Email(addr.to_string())),
                             None => {
-                                return ConfigResult::error(
+                                return AutodiscoverResult::error(
                                     "Missing redirect address when it should be available",
                                 )
                             }
@@ -362,7 +362,7 @@ impl Into<ConfigResult> for Autodiscover {
                         Action::RedirectUrl => match account.redirect_url() {
                             Some(url) => Some(RedirectType::Url(url.to_string())),
                             None => {
-                                return ConfigResult::error(
+                                return AutodiscoverResult::error(
                                     "Missing redirect url when it should be available",
                                 )
                             }
@@ -371,16 +371,14 @@ impl Into<ConfigResult> for Autodiscover {
                     };
 
                     if let Some(redirect) = redirect_type {
-                        return ConfigResult::Redirect(redirect);
+                        return AutodiscoverResult::Redirect(redirect);
                     }
                 }
             }
 
-            return ConfigResult::Ok(AutodiscoverResponse::Pox(response));
+            return AutodiscoverResult::Ok(AutodiscoverResponse::Pox(response));
         }
 
-        ConfigResult::Error(super::Error {
-            message: String::new(),
-        })
+        AutodiscoverResult::error("Config did not contain a response value")
     }
 }

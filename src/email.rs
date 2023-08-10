@@ -4,11 +4,11 @@ use log::warn;
 use validator::validate_email;
 
 use crate::{
-    client::{AutodiscoverRequest, Client},
+    client::Client,
     // ldap::Ldap,
     error::{ErrorKind, Result},
     failed,
-    types::{candidate::CandidateType, AutodiscoverResponse},
+    types::{protocol::Protocol, request::AutodiscoverRequest, response::AutodiscoverResponse},
 };
 
 const INVALID_EMAIL_MESSAGE: &str = "The given email address is invalid";
@@ -61,12 +61,12 @@ pub async fn from_email<E: AsRef<str>, P: AsRef<str>, U: AsRef<str>>(
         format!(
             "https://autodiscover.{}/autodiscover/autodiscover.{}",
             domain,
-            CandidateType::POX
+            Protocol::POX
         ),
         format!(
             "https://{}/autodiscover/autodiscover.{}",
             domain,
-            CandidateType::POX
+            Protocol::POX
         ),
     ];
 
@@ -111,7 +111,7 @@ pub async fn from_email<E: AsRef<str>, P: AsRef<str>, U: AsRef<str>>(
     let candidate = format!(
         "http://autodiscover.{}/autodiscover/autodiscover.{}",
         domain,
-        CandidateType::POX
+        Protocol::POX
     );
 
     let request = AutodiscoverRequest::new(candidate, email.as_ref(), false);
@@ -133,7 +133,7 @@ pub async fn from_email<E: AsRef<str>, P: AsRef<str>, U: AsRef<str>>(
                 "https://{}:{}/autodiscover/autodiscover.{}",
                 autodiscover_domain,
                 autodiscover_port,
-                CandidateType::POX
+                Protocol::POX
             );
 
             let request = AutodiscoverRequest::new(candidate, email.as_ref(), true);
@@ -182,12 +182,14 @@ mod test {
         env_logger::init();
         dotenv::dotenv().unwrap();
 
-        from_email(
+        let config = from_email(
             env::var("EMAIL").unwrap(),
             env::var("PASSWORD").ok(),
             env::var("USERNAME").ok(),
         )
         .await
         .unwrap();
+
+        println!("{:?}", config)
     }
 }

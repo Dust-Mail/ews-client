@@ -7,37 +7,16 @@ use crate::{
     error::{ErrorKind, Result},
     failed,
     http::{BasicCredentials, Http},
-    types::{candidate::CandidateType, AutodiscoverResponse, ConfigResult, RedirectType},
+    types::{
+        request::AutodiscoverRequest,
+        response::{AutodiscoverResponse, AutodiscoverResult, RedirectType},
+    },
 };
 
 pub struct Client {
     creds: BasicCredentials,
     http: Http,
     dns: Dns,
-}
-
-pub struct AutodiscoverRequest {
-    use_auth: bool,
-    url: String,
-    email: String,
-}
-
-impl AutodiscoverRequest {
-    pub fn new<U: Into<String>, E: Into<String>>(url: U, email: E, use_auth: bool) -> Self {
-        Self {
-            url: url.into(),
-            email: email.into(),
-            use_auth,
-        }
-    }
-
-    pub fn set_url(&mut self, url: String) {
-        self.url = url;
-    }
-
-    pub fn set_email(&mut self, email: String) {
-        self.email = email;
-    }
 }
 
 impl Client {
@@ -56,27 +35,27 @@ impl Client {
 
     async fn handle_config_result(
         &self,
-        result: ConfigResult,
+        result: AutodiscoverResult,
         mut request: AutodiscoverRequest,
     ) -> Result<AutodiscoverResponse> {
         match result {
-            ConfigResult::Ok(config) => Ok(config),
-            ConfigResult::Error(error) => failed!(
+            AutodiscoverResult::Ok(config) => Ok(config),
+            AutodiscoverResult::Error(error) => failed!(
                 ErrorKind::InvalidConfig,
                 "The received config is invalid: {}",
                 error.message(),
             ),
-            ConfigResult::Redirect(redirect_type) => {
+            AutodiscoverResult::Redirect(redirect_type) => {
                 match redirect_type {
                     RedirectType::Email(email_addr) => {
-                        if email_addr == request.email {
+                        if email_addr == request.email() {
                             failed!(ErrorKind::InvalidConfig, "The returned config redirects us to the same email address that we are already requesting");
                         }
 
                         request.set_email(email_addr);
                     }
                     RedirectType::Url(url) => {
-                        if url == request.url {
+                        if url == request.url() {
                             failed!(ErrorKind::InvalidConfig, "The returned config redirects us to the same url that we are already requesting");
                         }
 
@@ -97,41 +76,34 @@ impl Client {
     ) -> Result<AutodiscoverResponse> {
         let request: AutodiscoverRequest = request.into();
 
-        let url = &request.url;
-        let email = &request.email;
+        let url = request.url();
+        let payload = request.payload()?;
 
-        if let Some(candidate_type) = CandidateType::from_url(url) {
-            let body = candidate_type.create_request_body(email)?;
-
-            let method = if request.use_auth {
-                Method::POST
-            } else {
-                Method::GET
-            };
-
-            let creds = if request.use_auth {
-                Some(&self.creds)
-            } else {
-                None
-            };
-
-            match self.http.fetch_xml(url, method, body, creds).await {
-                Ok(bytes) => {
-                    let config_result = candidate_type.parse_config(bytes)?;
-
-                    let config = self.handle_config_result(config_result, request).await?;
-
-                    return Ok(config);
-                }
-                Err(err) => {
-                    failed!(ErrorKind::HttpRequest, "Error fetching {}: {:?}", url, err)
-                }
-            }
+        let method = if request.auth_required() {
+            Method::POST
         } else {
-            failed!(
-                ErrorKind::InvalidRequestUrl,
-                "The request url does not have a valid extension"
-            )
+            Method::GET
+        };
+
+        let creds = if request.auth_required() {
+            Some(&self.creds)
+        } else {
+            None
+        };
+
+        match self.http.fetch_xml(url, method, payload, creds).await {
+            Ok(bytes) => {
+                let request_protocol = request.protocol()?;
+
+                let config_result = request_protocol.parse_response(bytes)?;
+
+                let config = self.handle_config_result(config_result, request).await?;
+
+                return Ok(config);
+            }
+            Err(err) => {
+                failed!(ErrorKind::HttpRequest, "Error fetching {}: {:?}", url, err)
+            }
         }
     }
 

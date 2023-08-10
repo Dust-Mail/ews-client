@@ -1,38 +1,28 @@
-use std::{
-    fmt::Display,
-    io::{self},
-    path::Path,
-};
+use std::{fmt::Display, io, path::Path};
 
 use bytes::Bytes;
 use log::debug;
 use reqwest::IntoUrl;
 
-use crate::{
-    error::Result,
-    types::{
-        // SoapConfig
-        ConfigResult,
-        PoxAutodiscover,
-    },
-};
+use super::{pox::Autodiscover as PoxAutodiscover, response::AutodiscoverResult};
+use crate::error::Result;
 
-pub enum CandidateType {
+pub enum Protocol {
     // SOAP,
     POX,
 }
 
-impl Display for CandidateType {
+impl Display for Protocol {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         write!(f, "{}", self.file_extension())
     }
 }
 
-impl CandidateType {
+impl Protocol {
     /// Create the corresponding file extension for the current protocol.
     pub fn file_extension(&self) -> String {
         let ext = match self {
-            CandidateType::POX => "xml",
+            Protocol::POX => "xml",
             // CandidateType::SOAP => "svc",
         };
 
@@ -64,7 +54,7 @@ impl CandidateType {
 
     pub fn create_request_body<E: AsRef<str>>(&self, email_address: E) -> Result<Bytes> {
         match &self {
-            CandidateType::POX => {
+            Protocol::POX => {
                 let request_config = PoxAutodiscover::create_request(email_address.as_ref());
 
                 let config_string = serde_xml_rs::to_string(&request_config)?;
@@ -76,11 +66,11 @@ impl CandidateType {
         }
     }
 
-    pub fn parse_config<B: AsRef<[u8]>>(&self, bytes: B) -> Result<ConfigResult> {
+    pub fn parse_response<B: AsRef<[u8]>>(&self, bytes: B) -> Result<AutodiscoverResult> {
         let reader = io::Cursor::new(bytes);
 
         match &self {
-            CandidateType::POX => {
+            Protocol::POX => {
                 let config = PoxAutodiscover::from_xml(reader)?;
 
                 Ok(config.into())
