@@ -39,7 +39,7 @@ jobs:
       - name: Test
         run: cargo test
         env:
-          USERNAME: mail@guusvanmeerveld.dev
+          EMAIL: mail@guusvanmeerveld.dev
 
       - name: Publish
         run: cargo publish
