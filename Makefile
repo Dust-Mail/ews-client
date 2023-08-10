@@ -5,6 +5,6 @@ VERSION := 0.2.0
 release:
 	sed -i 's/^version = .*/version = "$(VERSION)"/' Cargo.toml
 	cargo fetch
-	git commit -am "Bump version to $(VERSION)"
+	git commit -am "bump(version): $(VERSION)"
 	git tag -a v$(VERSION) -m "Version $(VERSION)"
 	git push && git push --tags
