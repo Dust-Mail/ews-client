@@ -24,6 +24,12 @@ pub struct Error {
     message: String,
 }
 
+impl From<&pox::Error> for Error {
+    fn from(error: &pox::Error) -> Self {
+        Self::new(format!("Code {}, {}", error.code(), error.message()))
+    }
+}
+
 impl Error {
     pub fn new<M: Into<String>>(message: M) -> Self {
         Self {
