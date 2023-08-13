@@ -1,7 +1,5 @@
-pub use pox::Autodiscover as PoxAutodiscover;
-use pox::Response as PoxResponse;
-
-use super::pox;
+#[cfg(feature = "pox")]
+use super::pox::{self, Response as PoxResponse};
 
 pub enum AutodiscoverResult {
     Ok(AutodiscoverResponse),
@@ -24,6 +22,7 @@ pub struct Error {
     message: String,
 }
 
+#[cfg(feature = "pox")]
 impl From<&pox::Error> for Error {
     fn from(error: &pox::Error) -> Self {
         Self::new(format!("Code {}, {}", error.code(), error.message()))
@@ -44,5 +43,6 @@ impl Error {
 
 #[derive(Debug)]
 pub enum AutodiscoverResponse {
+    #[cfg(feature = "pox")]
     Pox(PoxResponse),
 }

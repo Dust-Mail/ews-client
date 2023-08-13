@@ -47,21 +47,25 @@ pub async fn from_email<E: AsRef<str>, P: AsRef<str>, U: AsRef<str>>(
 
     // We initialize our candidates with the basic links.
     let candidates: Vec<String> = vec![
-        // format!(
-        //     "https://autodiscover.{}/autodiscover/autodiscover.{}",
-        //     domain,
-        //     CandidateType::SOAP
-        // ),
-        // format!(
-        //     "https://{}/autodiscover/autodiscover.{}",
-        //     domain,
-        //     CandidateType::SOAP
-        // ),
+        #[cfg(feature = "soap")]
+        format!(
+            "https://autodiscover.{}/autodiscover/autodiscover.{}",
+            domain,
+            CandidateType::SOAP
+        ),
+        #[cfg(feature = "soap")]
+        format!(
+            "https://{}/autodiscover/autodiscover.{}",
+            domain,
+            CandidateType::SOAP
+        ),
+        #[cfg(feature = "pox")]
         format!(
             "https://autodiscover.{}/autodiscover/autodiscover.{}",
             domain,
             Protocol::POX
         ),
+        #[cfg(feature = "pox")]
         format!(
             "https://{}/autodiscover/autodiscover.{}",
             domain,
@@ -106,24 +110,27 @@ pub async fn from_email<E: AsRef<str>, P: AsRef<str>, U: AsRef<str>>(
         }
     }
 
-    // Otherwise, we try the backup candidate with an unauthenticated request.
-    let candidate = format!(
-        "http://autodiscover.{}/autodiscover/autodiscover.{}",
-        domain,
-        Protocol::POX
-    );
+    #[cfg(feature = "pox")]
+    {
+        // Otherwise, we try the backup candidate with an unauthenticated request.
+        let candidate = format!(
+            "http://autodiscover.{}/autodiscover/autodiscover.{}",
+            domain,
+            Protocol::POX
+        );
 
-    let request = AutodiscoverRequest::new(candidate, email.as_ref(), false);
+        let request = AutodiscoverRequest::new(candidate, email.as_ref(), false);
 
-    let response = client.send_request(request).await;
+        let response = client.send_request(request).await;
 
-    match response {
-        Ok(config) => return Ok(config),
-        Err(error) => {
-            warn!("{:?}", error);
-            errors.push(error);
-        }
-    };
+        match response {
+            Ok(config) => return Ok(config),
+            Err(error) => {
+                warn!("{:?}", error);
+                errors.push(error);
+            }
+        };
+    }
 
     // Finally, if all else failed, we try a dns query to try and resolve a domain from there.
     match client
@@ -131,25 +138,38 @@ pub async fn from_email<E: AsRef<str>, P: AsRef<str>, U: AsRef<str>>(
         .await
     {
         Ok((autodiscover_domain, autodiscover_port)) => {
-            let candidate = format!(
-                "https://{}:{}/autodiscover/autodiscover.{}",
-                autodiscover_domain,
-                autodiscover_port,
-                Protocol::POX
-            );
+            let candidates: Vec<String> = vec![
+                #[cfg(feature = "pox")]
+                format!(
+                    "https://{}:{}/autodiscover/autodiscover.{}",
+                    autodiscover_domain,
+                    autodiscover_port,
+                    Protocol::POX
+                ),
+            ];
 
-            let request = AutodiscoverRequest::new(candidate, email.as_ref(), true);
+            let mut futures: Vec<_> = Vec::new();
 
-            // We send an authenticated request.
-            let response = client.send_request(request).await;
+            for candidate in candidates {
+                let request = AutodiscoverRequest::new(candidate, email.as_ref(), true);
 
-            match response {
-                Ok(config) => return Ok(config),
-                Err(error) => {
-                    warn!("{:?}", error);
-                    errors.push(error)
-                }
-            };
+                // We send an authenticated request.
+                let future = client.send_request(request);
+
+                futures.push(future);
+            }
+
+            let responses = join_all(futures).await;
+
+            for response in responses {
+                match response {
+                    Ok(config) => return Ok(config),
+                    Err(error) => {
+                        warn!("{:?}", error);
+                        errors.push(error)
+                    }
+                };
+            }
         }
         Err(error) => {
             warn!("{:?}", error);
@@ -199,6 +219,7 @@ mod test {
         .unwrap();
 
         match config {
+            #[cfg(feature = "pox")]
             AutodiscoverResponse::Pox(response) => {
                 for account in response.account() {
                     println!("{:?}", account)

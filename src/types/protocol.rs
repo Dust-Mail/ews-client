@@ -4,11 +4,18 @@ use bytes::Bytes;
 use log::debug;
 use reqwest::IntoUrl;
 
-use super::{pox::Autodiscover as PoxAutodiscover, response::AutodiscoverResult};
-use crate::error::Result;
+#[cfg(feature = "pox")]
+use super::pox::Autodiscover as PoxAutodiscover;
+
+use super::response::AutodiscoverResult;
+use crate::{
+    error::{ErrorKind, Result},
+    failed,
+};
 
 pub enum Protocol {
     // SOAP,
+    #[cfg(feature = "pox")]
     POX,
 }
 
@@ -22,8 +29,10 @@ impl Protocol {
     /// Create the corresponding file extension for the current protocol.
     pub fn file_extension(&self) -> String {
         let ext = match self {
+            #[cfg(feature = "pox")]
             Protocol::POX => "xml",
             // CandidateType::SOAP => "svc",
+            _ => "",
         };
 
         ext.to_string()
@@ -47,6 +56,7 @@ impl Protocol {
     pub fn from_ext<E: AsRef<str>>(ext: E) -> Option<Self> {
         match ext.as_ref() {
             // "svc" => Some(Self::SOAP),
+            #[cfg(feature = "pox")]
             "xml" => Some(Self::POX),
             _ => None,
         }
@@ -54,6 +64,7 @@ impl Protocol {
 
     pub fn create_request_body<E: AsRef<str>>(&self, email_address: E) -> Result<Bytes> {
         match &self {
+            #[cfg(feature = "pox")]
             Protocol::POX => {
                 let request_config = PoxAutodiscover::create_request(email_address.as_ref());
 
@@ -63,6 +74,7 @@ impl Protocol {
 
                 Ok(config_string.into())
             }
+            _ => Ok(Bytes::new()),
         }
     }
 
@@ -70,15 +82,20 @@ impl Protocol {
         let reader = io::Cursor::new(bytes);
 
         match &self {
+            #[cfg(feature = "pox")]
             Protocol::POX => {
                 let config = PoxAutodiscover::from_xml(reader)?;
 
                 Ok(config.into())
             } // CandidateType::SOAP => {
-              //     let config: SoapConfig = serde_xml_rs::from_reader(xml)?;
+            //     let config: SoapConfig = serde_xml_rs::from_reader(xml)?;
 
-              //     Ok(config.into())
-              // }
+            //     Ok(config.into())
+            // }
+            _ => failed!(
+                ErrorKind::InvalidProtocol,
+                "There is valid protocol to handle the response"
+            ),
         }
     }
 }

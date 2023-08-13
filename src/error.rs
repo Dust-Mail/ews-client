@@ -11,6 +11,7 @@ pub enum ErrorKind {
     InvalidEmailAddress,
     HttpRequest,
     NotFound,
+    InvalidProtocol,
     ConfigNotFound(Vec<Error>),
     Resolve(ResolveError),
     ParseXml(ParseXmlError),

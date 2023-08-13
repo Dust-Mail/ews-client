@@ -9,6 +9,11 @@ rust-version = "1.67"
 description = "An implementation of the Microsoft autodiscover protocol for Exchange"
 license = "MIT"
 
+[features]
+default = ["pox"]
+pox = []
+soap = []
+
 [dependencies]
 async-recursion = "1.0.4"
 bytes = "1.4.0"

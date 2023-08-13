@@ -1,3 +1,4 @@
+#[cfg(feature = "pox")]
 pub mod pox;
 pub mod protocol;
 pub mod request;
