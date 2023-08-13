@@ -2,7 +2,7 @@ mod client;
 mod constants;
 mod dns;
 mod email;
-mod error;
+pub mod error;
 mod http;
 pub mod types;
 

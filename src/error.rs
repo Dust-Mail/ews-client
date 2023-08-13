@@ -70,6 +70,10 @@ impl Error {
             message: message.into(),
         }
     }
+
+    pub fn kind(&self) -> &ErrorKind {
+        &self.kind
+    }
 }
 
 #[macro_export]

@@ -168,7 +168,7 @@ pub async fn from_email<E: AsRef<str>, P: AsRef<str>, U: AsRef<str>>(
 mod test {
     use std::env;
 
-    use crate::from_email;
+    use crate::{from_email, types::response::AutodiscoverResponse};
 
     use super::domain_from_email;
 
@@ -198,6 +198,12 @@ mod test {
         .await
         .unwrap();
 
-        println!("{:?}", config)
+        match config {
+            AutodiscoverResponse::Pox(response) => {
+                for account in response.account() {
+                    println!("{:?}", account)
+                }
+            }
+        }
     }
 }
