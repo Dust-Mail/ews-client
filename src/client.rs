@@ -3,8 +3,7 @@ use surf::http::Method;
 
 use crate::{
     dns::Dns,
-    error::{ErrorKind, Result},
-    failed,
+    error::{err, ErrorKind, Result},
     http::{BasicCredentials, Http},
     types::{
         request::AutodiscoverRequest,
@@ -39,7 +38,7 @@ impl Client {
     ) -> Result<AutodiscoverResponse> {
         match result {
             AutodiscoverResult::Ok(config) => Ok(config),
-            AutodiscoverResult::Error(error) => failed!(
+            AutodiscoverResult::Error(error) => err!(
                 ErrorKind::InvalidConfig,
                 "The received config is invalid: {}",
                 error.message(),
@@ -48,14 +47,14 @@ impl Client {
                 match redirect_type {
                     RedirectType::Email(email_addr) => {
                         if email_addr == request.email() {
-                            failed!(ErrorKind::InvalidConfig, "The returned config redirects us to the same email address that we are already requesting");
+                            err!(ErrorKind::InvalidConfig, "The returned config redirects us to the same email address that we are already requesting");
                         }
 
                         request.set_email(email_addr);
                     }
                     RedirectType::Url(url) => {
                         if url == request.url() {
-                            failed!(ErrorKind::InvalidConfig, "The returned config redirects us to the same url that we are already requesting");
+                            err!(ErrorKind::InvalidConfig, "The returned config redirects us to the same url that we are already requesting");
                         }
 
                         request.set_url(url);

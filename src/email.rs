@@ -5,8 +5,7 @@ use validator::validate_email;
 
 use crate::{
     client::Client,
-    error::{Error, ErrorKind, Result},
-    failed,
+    error::{err, Error, ErrorKind, Result},
     types::{protocol::Protocol, request::AutodiscoverRequest, response::AutodiscoverResponse},
 };
 
@@ -17,7 +16,7 @@ const INVALID_EMAIL_MESSAGE: &str = "The given email address is invalid";
 /// Also validates that the given string is an email address.
 fn domain_from_email<E: AsRef<str>>(email: E) -> Result<String> {
     if !validate_email(email.as_ref()) {
-        failed!(ErrorKind::InvalidEmailAddress, "{}", INVALID_EMAIL_MESSAGE);
+        err!(ErrorKind::InvalidEmailAddress, "{}", INVALID_EMAIL_MESSAGE);
     };
 
     let mut email_split = email.as_ref().split('@');
@@ -26,7 +25,7 @@ fn domain_from_email<E: AsRef<str>>(email: E) -> Result<String> {
 
     let domain = match email_split.next() {
         Some(domain) => domain,
-        None => failed!(ErrorKind::InvalidEmailAddress, "{}", INVALID_EMAIL_MESSAGE),
+        None => err!(ErrorKind::InvalidEmailAddress, "{}", INVALID_EMAIL_MESSAGE),
     };
 
     Ok(domain.to_string())
@@ -178,7 +177,7 @@ pub async fn from_email<E: AsRef<str>, P: AsRef<str>, U: AsRef<str>>(
     };
 
     // If nothing return a valid configuration, we return an error.
-    failed!(
+    err!(
         ErrorKind::ConfigNotFound(errors),
         "Could not find any config for that email address",
     )

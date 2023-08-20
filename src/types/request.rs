@@ -1,9 +1,6 @@
 use bytes::Bytes;
 
-use crate::{
-    error::{ErrorKind, Result},
-    failed,
-};
+use crate::error::{err, ErrorKind, Result};
 
 use super::protocol::Protocol;
 
@@ -34,7 +31,7 @@ impl AutodiscoverRequest {
         match Protocol::from_url(&self.url) {
             Some(url) => Ok(url),
             None => {
-                failed!(ErrorKind::InvalidRequestUrl, "The request url is not valid")
+                err!(ErrorKind::InvalidRequestUrl, "The request url is not valid")
             }
         }
     }

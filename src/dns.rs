@@ -1,9 +1,6 @@
 use std::cmp::Ordering;
 
-use crate::{
-    error::{ErrorKind, Result},
-    failed,
-};
+use crate::error::{err, ErrorKind, Result};
 
 use trust_dns_resolver::{config::ResolverConfig, proto::rr::rdata::SRV};
 
@@ -97,7 +94,7 @@ impl Dns {
             return Ok((record.record.target().to_string(), record.record.port()));
         }
 
-        failed!(
+        err!(
             ErrorKind::NotFound,
             "Could not find any domains from the SRV query"
         )

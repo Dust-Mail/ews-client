@@ -8,10 +8,7 @@ use surf::Url;
 use super::pox::Autodiscover as PoxAutodiscover;
 
 use super::response::AutodiscoverResult;
-use crate::{
-    error::{ErrorKind, Result},
-    failed,
-};
+use crate::error::{err, ErrorKind, Result};
 
 pub enum Protocol {
     // SOAP,
@@ -92,7 +89,7 @@ impl Protocol {
 
             //     Ok(config.into())
             // }
-            _ => failed!(
+            _ => err!(
                 ErrorKind::InvalidProtocol,
                 "There is valid protocol to handle the response"
             ),

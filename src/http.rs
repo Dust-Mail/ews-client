@@ -5,10 +5,7 @@ use bytes::Bytes;
 use log::debug;
 use surf::{http::Method, Client as HttpClient, Config, Url};
 
-use crate::{
-    error::{Error, ErrorKind, Result},
-    failed,
-};
+use crate::error::{err, ErrorKind, Result};
 
 #[derive(Clone)]
 /// Credentials used for HTTP Basic auth
@@ -59,15 +56,14 @@ impl Http {
     const TIMEOUT: Duration = Duration::from_secs(10);
 
     pub fn new() -> Result<Self> {
-        let client = Config::new()
-            .set_timeout(Some(Self::TIMEOUT))
-            .try_into()
-            .map_err(|err| {
-                Error::new(
-                    ErrorKind::BuildHttpClient,
-                    format!("Failed to create http client: {}", err),
-                )
-            })?;
+        let client = match Config::new().set_timeout(Some(Self::TIMEOUT)).try_into() {
+            Ok(client) => client,
+            Err(err) => err!(
+                ErrorKind::BuildHttpClient,
+                "Failed to create http client: {}",
+                err,
+            ),
+        };
 
         let http = Self { client };
 
@@ -82,12 +78,16 @@ impl Http {
         body: Bytes,
         basic_creds: Option<C>,
     ) -> Result<Bytes> {
-        Url::parse(url.as_ref()).map_err(|err| {
-            Error::new(
-                ErrorKind::InvalidRequestUrl,
-                format!("The provided request url is not valid: {}", err),
-            )
-        })?;
+        match Url::parse(url.as_ref()) {
+            Ok(_) => {}
+            Err(err) => {
+                err!(
+                    ErrorKind::InvalidRequestUrl,
+                    "The provided request url is not valid: {}",
+                    err,
+                )
+            }
+        }
 
         let mut request = self
             .client
@@ -108,7 +108,7 @@ impl Http {
         debug!("Status: {}", response.status(),);
 
         if !response.status().is_success() {
-            failed!(
+            err!(
                 ErrorKind::HttpRequest,
                 "Http request returned status {}",
                 response.status()

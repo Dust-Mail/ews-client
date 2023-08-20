@@ -1,8 +1,28 @@
-use std::{fmt::Display, io::Error as IoError, result};
+use std::{error, fmt::Display, io::Error as IoError, result};
 
 use serde_xml_rs::Error as ParseXmlError;
 use surf::Error as SurfError;
 use trust_dns_resolver::error::ResolveError;
+
+macro_rules! impl_from_error {
+    ($error_type:ty, $error_kind:expr, $error_msg:expr) => {
+        impl From<$error_type> for Error {
+            fn from(err: $error_type) -> Self {
+                Error::new($error_kind(err), $error_msg)
+            }
+        }
+    };
+}
+
+macro_rules! err {
+    ($kind:expr, $($arg:tt)*) => {{
+		use crate::error::Error;
+
+        let kind = $kind;
+        let message = format!($($arg)*);
+        return Err(Error::new( kind, message ));
+    }};
+}
 
 #[derive(Debug)]
 pub enum ErrorKind {
@@ -26,41 +46,34 @@ pub struct Error {
     message: String,
 }
 
+impl error::Error for Error {}
+
 impl Display for Error {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         write!(f, "Error: {}", self.message)
     }
 }
 
-impl From<SurfError> for Error {
-    fn from(error: SurfError) -> Self {
-        Error::new(ErrorKind::Surf(error), "Failed to create http request")
-    }
-}
-
-impl From<ParseXmlError> for Error {
-    fn from(error: ParseXmlError) -> Self {
-        Error::new(
-            ErrorKind::ParseXml(error),
-            "An error while parsing the XML response",
-        )
-    }
-}
-
-impl From<IoError> for Error {
-    fn from(error: IoError) -> Self {
-        Error::new(ErrorKind::Io(error), "An error occurred in an io process")
-    }
-}
-
-impl From<ResolveError> for Error {
-    fn from(error: ResolveError) -> Self {
-        Error::new(
-            ErrorKind::Resolve(error),
-            "An error occurred while resolving a dns query",
-        )
-    }
-}
+impl_from_error!(
+    SurfError,
+    |err| ErrorKind::Surf(err),
+    "Failed to create http request"
+);
+impl_from_error!(
+    ParseXmlError,
+    |err| ErrorKind::ParseXml(err),
+    "An error while parsing the XML response"
+);
+impl_from_error!(
+    IoError,
+    |err| ErrorKind::Io(err),
+    "An error occurred in an io process"
+);
+impl_from_error!(
+    ResolveError,
+    |err| ErrorKind::Resolve(err),
+    "An error occurred while resolving a dns query"
+);
 
 impl Error {
     pub fn new<M: Into<String>>(kind: ErrorKind, message: M) -> Self {
@@ -75,15 +88,6 @@ impl Error {
     }
 }
 
-#[macro_export]
-macro_rules! failed {
-    ($kind:expr, $($arg:tt)*) => {{
-		use crate::error::Error;
-
-        let kind = $kind;
-        let message = format!($($arg)*);
-        return Err(Error::new( kind, message ));
-    }};
-}
+pub(crate) use err;
 
 pub type Result<T> = result::Result<T, Error>;
