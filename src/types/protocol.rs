@@ -2,7 +2,7 @@ use std::{fmt::Display, io, path::Path};
 
 use bytes::Bytes;
 use log::debug;
-use reqwest::IntoUrl;
+use surf::Url;
 
 #[cfg(feature = "pox")]
 use super::pox::Autodiscover as PoxAutodiscover;
@@ -39,8 +39,8 @@ impl Protocol {
     }
 
     /// Detects the protocol from a given url.
-    pub fn from_url<U: IntoUrl>(url: U) -> Option<Self> {
-        let url = url.into_url().ok()?;
+    pub fn from_url<U: AsRef<str>>(url: U) -> Option<Self> {
+        let url = Url::parse(url.as_ref()).ok()?;
 
         let path = Path::new(url.path());
 

@@ -5,7 +5,13 @@ use crate::{
     failed,
 };
 
-use trust_dns_resolver::{config::ResolverConfig, proto::rr::rdata::SRV, TokioAsyncResolver};
+use trust_dns_resolver::{config::ResolverConfig, proto::rr::rdata::SRV};
+
+#[cfg(feature = "runtime-tokio")]
+use trust_dns_resolver::TokioAsyncResolver;
+
+#[cfg(feature = "runtime-async-std")]
+use async_std_resolver::{resolver, AsyncStdResolver};
 
 struct WeightedSrvRecord {
     record: SRV,
@@ -57,12 +63,19 @@ impl PartialEq for WeightedSrvRecord {
 
 /// A DNS client, simplified to easily lookup SRV records
 pub struct Dns {
+    #[cfg(feature = "runtime-tokio")]
     resolver: TokioAsyncResolver,
+    #[cfg(feature = "runtime-async-std")]
+    resolver: AsyncStdResolver,
 }
 
 impl Dns {
-    pub fn new() -> Result<Self> {
+    pub async fn new() -> Result<Self> {
+        #[cfg(feature = "runtime-tokio")]
         let resolver = TokioAsyncResolver::tokio(ResolverConfig::default(), Default::default())?;
+
+        #[cfg(feature = "runtime-async-std")]
+        let resolver = resolver(ResolverConfig::default(), Default::default()).await?;
 
         let dns = Self { resolver };
 

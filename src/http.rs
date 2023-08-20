@@ -1,9 +1,12 @@
+use std::time::Duration;
+
+use base64::{display::Base64Display, engine::general_purpose::STANDARD};
 use bytes::Bytes;
 use log::debug;
-use reqwest::{Client, IntoUrl, Method};
+use surf::{http::Method, Client as HttpClient, Config, Url};
 
 use crate::{
-    error::{ErrorKind, Result},
+    error::{Error, ErrorKind, Result},
     failed,
 };
 
@@ -12,6 +15,23 @@ use crate::{
 pub struct BasicCredentials {
     username: String,
     password: Option<String>,
+}
+
+impl BasicCredentials {
+    pub fn header(&self) -> String {
+        let creds = match self.password.as_ref() {
+            Some(password) => {
+                format!("{}:{}", self.username, password)
+            }
+            None => {
+                format!("{}", self.username)
+            }
+        };
+
+        let creds_base64 = Base64Display::new(creds.as_bytes(), &STANDARD);
+
+        format!("Basic {}", creds_base64)
+    }
 }
 
 impl AsRef<BasicCredentials> for BasicCredentials {
@@ -31,43 +51,59 @@ impl<U: Into<String>, P: Into<String>> From<(U, Option<P>)> for BasicCredentials
 
 /// A simple HTTP client to fetch XML content
 pub struct Http {
-    client: Client,
+    client: HttpClient,
 }
 
 impl Http {
+    const XML_CONTENT_TYPE: (&str, &str) = ("application/xml", "text/xml");
+    const TIMEOUT: Duration = Duration::from_secs(10);
+
     pub fn new() -> Result<Self> {
-        let client = Client::builder().build()?;
+        let client = Config::new()
+            .set_timeout(Some(Self::TIMEOUT))
+            .try_into()
+            .map_err(|err| {
+                Error::new(
+                    ErrorKind::BuildHttpClient,
+                    format!("Failed to create http client: {}", err),
+                )
+            })?;
 
         let http = Self { client };
 
         Ok(http)
     }
 
-    const XML_CONTENT_TYPE: (&str, &str) = ("application/xml", "text/xml");
-
     /// Fetch XML data over HTTP given the url, method, body and optionally basic auth credentials.
-    ///
-    /// The server must respond with a Content-Type that corresponds with XML data.
-    pub async fn fetch_xml<U: IntoUrl, C: AsRef<BasicCredentials>>(
+    pub async fn request_xml<U: AsRef<str>, C: AsRef<BasicCredentials>>(
         &self,
         url: U,
         method: Method,
         body: Bytes,
         basic_creds: Option<C>,
     ) -> Result<Bytes> {
+        Url::parse(url.as_ref()).map_err(|err| {
+            Error::new(
+                ErrorKind::InvalidRequestUrl,
+                format!("The provided request url is not valid: {}", err),
+            )
+        })?;
+
         let mut request = self
             .client
             .request(method, url)
-            .body(body)
+            .body(body.as_ref())
             .header("Content-Type", Self::XML_CONTENT_TYPE.1);
 
         if let Some(creds) = basic_creds {
             let creds = creds.as_ref();
 
-            request = request.basic_auth(&creds.username, creds.password.as_ref())
+            let header_value = creds.header();
+
+            request = request.header("Authorization", header_value);
         }
 
-        let response = request.send().await?;
+        let mut response = request.send().await?;
 
         debug!("Status: {}", response.status(),);
 
@@ -79,42 +115,11 @@ impl Http {
             )
         };
 
-        // Get the Content-Type header, error if it doesn't exist
-        let content_type = match response.headers().get("content-type") {
-            Some(header) => match header.to_str() {
-                Ok(header) => header,
-                Err(_) => {
-                    failed!(
-                        ErrorKind::HttpRequest,
-                        "Content-Type header does not contain valid characters",
-                    )
-                }
-            },
-            None => {
-                failed!(
-                    ErrorKind::HttpRequest,
-                    "Server did not include a content-type header in response",
-                )
-            }
-        };
-
-        let content_type = content_type.to_string();
-
         // Get the http message body
-        let bytes = response.bytes().await?;
+        let bytes = response.body_bytes().await?;
 
         debug!("Response string: {}", std::str::from_utf8(&bytes).unwrap());
 
-        // Ensure the content type is XML
-        if !(content_type.starts_with(Self::XML_CONTENT_TYPE.0)
-            || content_type.starts_with(Self::XML_CONTENT_TYPE.1))
-        {
-            failed!(
-                ErrorKind::HttpRequest,
-                "Server did not respond with XML content",
-            );
-        }
-
-        Ok(bytes)
+        Ok(bytes.into())
     }
 }

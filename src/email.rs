@@ -81,7 +81,7 @@ pub async fn from_email<E: AsRef<str>, P: AsRef<str>, U: AsRef<str>>(
         password.as_ref().map(|pass| pass.as_ref()),
     );
 
-    let client = Client::new(creds)?;
+    let client = Client::new(creds).await?;
 
     let mut requests = Vec::new();
 
@@ -188,9 +188,7 @@ pub async fn from_email<E: AsRef<str>, P: AsRef<str>, U: AsRef<str>>(
 mod test {
     use std::env;
 
-    use crate::{from_email, types::response::AutodiscoverResponse};
-
-    use super::domain_from_email;
+    use super::*;
 
     #[test]
     fn test_domain() {
@@ -205,7 +203,8 @@ mod test {
         }
     }
 
-    #[tokio::test]
+    #[cfg_attr(feature = "runtime-async-std", async_std::test)]
+    #[cfg_attr(feature = "runtime-tokio", tokio::test)]
     async fn test_from_email() {
         env_logger::init();
         dotenv::dotenv().unwrap();
@@ -218,13 +217,6 @@ mod test {
         .await
         .unwrap();
 
-        match config {
-            #[cfg(feature = "pox")]
-            AutodiscoverResponse::Pox(response) => {
-                for account in response.account() {
-                    println!("{:?}", account)
-                }
-            }
-        }
+        println!("{:?}", config)
     }
 }

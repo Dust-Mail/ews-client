@@ -1,6 +1,5 @@
-use reqwest::Method;
-
 use async_recursion::async_recursion;
+use surf::http::Method;
 
 use crate::{
     dns::Dns,
@@ -20,9 +19,9 @@ pub struct Client {
 }
 
 impl Client {
-    pub fn new<B: Into<BasicCredentials>>(creds: B) -> Result<Self> {
+    pub async fn new<B: Into<BasicCredentials>>(creds: B) -> Result<Self> {
         let http = Http::new()?;
-        let dns = Dns::new()?;
+        let dns = Dns::new().await?;
 
         let client = Self {
             dns,
@@ -80,9 +79,9 @@ impl Client {
         let payload = request.payload()?;
 
         let method = if request.auth_required() {
-            Method::POST
+            Method::Post
         } else {
-            Method::GET
+            Method::Get
         };
 
         let creds = if request.auth_required() {
@@ -91,20 +90,15 @@ impl Client {
             None
         };
 
-        match self.http.fetch_xml(url, method, payload, creds).await {
-            Ok(bytes) => {
-                let request_protocol = request.protocol()?;
+        let bytes = self.http.request_xml(url, method, payload, creds).await?;
 
-                let config_result = request_protocol.parse_response(bytes)?;
+        let request_protocol = request.protocol()?;
 
-                let config = self.handle_config_result(config_result, request).await?;
+        let config_result = request_protocol.parse_response(bytes)?;
 
-                return Ok(config);
-            }
-            Err(err) => {
-                failed!(ErrorKind::HttpRequest, "Error fetching {}: {:?}", url, err)
-            }
-        }
+        let config = self.handle_config_result(config_result, request).await?;
+
+        return Ok(config);
     }
 
     pub async fn dns_query<D: AsRef<str>>(&self, domain: D) -> Result<(String, u16)> {

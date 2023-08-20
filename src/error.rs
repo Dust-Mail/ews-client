@@ -1,7 +1,7 @@
 use std::{fmt::Display, io::Error as IoError, result};
 
-use reqwest::Error as ReqwestError;
 use serde_xml_rs::Error as ParseXmlError;
+use surf::Error as SurfError;
 use trust_dns_resolver::error::ResolveError;
 
 #[derive(Debug)]
@@ -9,13 +9,14 @@ pub enum ErrorKind {
     InvalidConfig,
     InvalidRequestUrl,
     InvalidEmailAddress,
-    HttpRequest,
     NotFound,
     InvalidProtocol,
+    HttpRequest,
+    BuildHttpClient,
     ConfigNotFound(Vec<Error>),
     Resolve(ResolveError),
     ParseXml(ParseXmlError),
-    Reqwest(ReqwestError),
+    Surf(SurfError),
     Io(IoError),
 }
 
@@ -31,12 +32,9 @@ impl Display for Error {
     }
 }
 
-impl From<ReqwestError> for Error {
-    fn from(error: ReqwestError) -> Self {
-        Error::new(
-            ErrorKind::Reqwest(error),
-            "An error while creating a http request",
-        )
+impl From<SurfError> for Error {
+    fn from(error: SurfError) -> Self {
+        Error::new(ErrorKind::Surf(error), "Failed to create http request")
     }
 }
 
