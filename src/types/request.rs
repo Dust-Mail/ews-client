@@ -1,17 +1,23 @@
+use std::borrow::Cow;
+
 use bytes::Bytes;
 
 use crate::error::{err, ErrorKind, Result};
 
 use super::protocol::Protocol;
 
-pub struct AutodiscoverRequest {
+pub struct AutodiscoverRequest<'a> {
     use_auth: bool,
-    url: String,
-    email: String,
+    url: Cow<'a, str>,
+    email: Cow<'a, str>,
 }
 
-impl AutodiscoverRequest {
-    pub fn new<U: Into<String>, E: Into<String>>(url: U, email: E, use_auth: bool) -> Self {
+impl<'a> AutodiscoverRequest<'a> {
+    pub fn new<U: Into<Cow<'a, str>>, E: Into<Cow<'a, str>>>(
+        url: U,
+        email: E,
+        use_auth: bool,
+    ) -> Self {
         Self {
             url: url.into(),
             email: email.into(),
@@ -19,12 +25,12 @@ impl AutodiscoverRequest {
         }
     }
 
-    pub fn set_url(&mut self, url: String) {
-        self.url = url;
+    pub fn set_url<U: Into<Cow<'a, str>>>(&mut self, url: U) {
+        self.url = url.into();
     }
 
-    pub fn set_email(&mut self, email: String) {
-        self.email = email;
+    pub fn set_email<E: Into<Cow<'a, str>>>(&mut self, email: E) {
+        self.email = email.into();
     }
 
     pub fn protocol(&self) -> Result<Protocol> {

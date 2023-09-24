@@ -56,7 +56,7 @@ impl Http {
     const TIMEOUT: Duration = Duration::from_secs(10);
 
     pub fn new() -> Result<Self> {
-        let client = match Config::new().set_timeout(Some(Self::TIMEOUT)).try_into() {
+        let client: surf::Client = match Config::new().set_timeout(Some(Self::TIMEOUT)).try_into() {
             Ok(client) => client,
             Err(err) => err!(
                 ErrorKind::BuildHttpClient,
@@ -65,7 +65,9 @@ impl Http {
             ),
         };
 
-        let http = Self { client };
+        let http = Self {
+            client: client.with(surf::middleware::Redirect::new(5)),
+        };
 
         Ok(http)
     }

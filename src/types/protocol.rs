@@ -65,11 +65,13 @@ impl Protocol {
             Protocol::POX => {
                 let request_config = PoxAutodiscover::create_request(email_address.as_ref());
 
-                let config_string = serde_xml_rs::to_string(&request_config)?;
+                let mut buf = Vec::new();
 
-                debug!("Request configuration: {}", config_string);
+                serde_xml_rs::to_writer(&mut buf, &request_config)?;
 
-                Ok(config_string.into())
+                debug!("Request configuration: {}", String::from_utf8_lossy(&buf));
+
+                Ok(buf.into())
             }
             _ => Ok(Bytes::new()),
         }

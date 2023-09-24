@@ -1,4 +1,4 @@
-use futures::future::join_all;
+use futures::future::select_ok;
 
 use log::warn;
 use validator::validate_email;
@@ -14,21 +14,23 @@ const INVALID_EMAIL_MESSAGE: &str = "The given email address is invalid";
 /// Parse the domain name from an email address.
 ///
 /// Also validates that the given string is an email address.
-fn domain_from_email<E: AsRef<str>>(email: E) -> Result<String> {
-    if !validate_email(email.as_ref()) {
+fn domain_from_email<'a>(email: &'a str) -> Result<&'a str> {
+    if !validate_email(email) {
         err!(ErrorKind::InvalidEmailAddress, "{}", INVALID_EMAIL_MESSAGE);
     };
 
-    let mut email_split = email.as_ref().split('@');
+    let domain = {
+        let mut email_split = email.split('@');
 
-    email_split.next();
+        email_split.next();
 
-    let domain = match email_split.next() {
-        Some(domain) => domain,
-        None => err!(ErrorKind::InvalidEmailAddress, "{}", INVALID_EMAIL_MESSAGE),
+        match email_split.next() {
+            Some(domain) => domain,
+            None => err!(ErrorKind::InvalidEmailAddress, "{}", INVALID_EMAIL_MESSAGE),
+        }
     };
 
-    Ok(domain.to_string())
+    Ok(domain)
 }
 
 /// Fetch an autodiscover config from a given email address and password.
@@ -39,6 +41,16 @@ pub async fn from_email<E: AsRef<str>, P: AsRef<str>, U: AsRef<str>>(
     password: Option<P>,
     username: Option<U>,
 ) -> Result<AutodiscoverResponse> {
+    let creds = (
+        username
+            .as_ref()
+            .map(|username| username.as_ref())
+            .unwrap_or(email.as_ref()),
+        password.as_ref().map(|pass| pass.as_ref()),
+    );
+
+    let client = Client::new(creds).await?;
+
     let domain = domain_from_email(email.as_ref())?;
 
     // In this function we follow the steps to autodiscovery as specified by the following:
@@ -72,17 +84,9 @@ pub async fn from_email<E: AsRef<str>, P: AsRef<str>, U: AsRef<str>>(
         ),
     ];
 
-    let creds = (
-        username
-            .as_ref()
-            .map(|username| username.as_ref())
-            .unwrap_or(email.as_ref()),
-        password.as_ref().map(|pass| pass.as_ref()),
-    );
+    let mut futures = Vec::new();
 
-    let client = Client::new(creds).await?;
-
-    let mut requests = Vec::new();
+    let mut errors: Vec<Error> = Vec::new();
 
     for candidate in candidates {
         let request = AutodiscoverRequest::new(candidate, email.as_ref(), true);
@@ -90,23 +94,7 @@ pub async fn from_email<E: AsRef<str>, P: AsRef<str>, U: AsRef<str>>(
         // We then send an authenticated request to each candidate.
         let future = client.send_request(request);
 
-        requests.push(future);
-    }
-
-    let results = join_all(requests).await;
-
-    let mut errors: Vec<Error> = Vec::new();
-
-    // If any of the urls are a hit, we return it.
-    for result in results {
-        match result {
-            Ok(config) => return Ok(config),
-            Err(error) => {
-                warn!("{:?}", error);
-
-                errors.push(error);
-            }
-        }
+        futures.push(future);
     }
 
     #[cfg(feature = "pox")]
@@ -120,15 +108,9 @@ pub async fn from_email<E: AsRef<str>, P: AsRef<str>, U: AsRef<str>>(
 
         let request = AutodiscoverRequest::new(candidate, email.as_ref(), false);
 
-        let response = client.send_request(request).await;
+        let future = client.send_request(request);
 
-        match response {
-            Ok(config) => return Ok(config),
-            Err(error) => {
-                warn!("{:?}", error);
-                errors.push(error);
-            }
-        };
+        futures.push(future);
     }
 
     // Finally, if all else failed, we try a dns query to try and resolve a domain from there.
@@ -136,18 +118,22 @@ pub async fn from_email<E: AsRef<str>, P: AsRef<str>, U: AsRef<str>>(
         .dns_query(format!("_autodiscover._tcp.{}", domain))
         .await
     {
-        Ok((autodiscover_domain, autodiscover_port)) => {
-            let candidates: Vec<String> = vec![
-                #[cfg(feature = "pox")]
-                format!(
-                    "https://{}:{}/autodiscover/autodiscover.{}",
-                    autodiscover_domain,
-                    autodiscover_port,
-                    Protocol::POX
-                ),
-            ];
+        Ok(records) => {
+            let mut candidates: Vec<String> = Vec::new();
 
-            let mut futures: Vec<_> = Vec::new();
+            for (domain, port) in records {
+                #[cfg(feature = "pox")]
+                {
+                    let pox_candidate = format!(
+                        "https://{}:{}/autodiscover/autodiscover.{}",
+                        domain,
+                        port,
+                        Protocol::POX
+                    );
+
+                    candidates.push(pox_candidate)
+                }
+            }
 
             for candidate in candidates {
                 let request = AutodiscoverRequest::new(candidate, email.as_ref(), true);
@@ -157,24 +143,24 @@ pub async fn from_email<E: AsRef<str>, P: AsRef<str>, U: AsRef<str>>(
 
                 futures.push(future);
             }
-
-            let responses = join_all(futures).await;
-
-            for response in responses {
-                match response {
-                    Ok(config) => return Ok(config),
-                    Err(error) => {
-                        warn!("{:?}", error);
-                        errors.push(error)
-                    }
-                };
-            }
         }
         Err(error) => {
             warn!("{:?}", error);
             errors.push(error)
         }
     };
+
+    if futures.is_empty() {
+        err!(ErrorKind::ConfigNotFound(errors), "No urls to request")
+    }
+
+    let result = select_ok(futures).await;
+
+    // If any of the urls are a hit, we return it.
+    match result {
+        Ok((config, _remaining)) => return Ok(config),
+        Err(error) => errors.push(error),
+    }
 
     // If nothing return a valid configuration, we return an error.
     err!(

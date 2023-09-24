@@ -1,6 +1,6 @@
 use std::cmp::Ordering;
 
-use crate::error::{err, ErrorKind, Result};
+use crate::error::Result;
 
 use trust_dns_resolver::{config::ResolverConfig, proto::rr::rdata::SRV};
 
@@ -82,7 +82,7 @@ impl Dns {
     /// Lookup an SRV record for a given domain.
     ///
     /// Returns the record with the highest priority and weight.
-    pub async fn srv_lookup<D: AsRef<str>>(&self, domain: D) -> Result<(String, u16)> {
+    pub async fn srv_lookup<D: AsRef<str>>(&self, domain: D) -> Result<Vec<(String, u16)>> {
         let records = self.resolver.srv_lookup(domain.as_ref()).await?;
 
         let mut weighted_records: Vec<_> =
@@ -90,13 +90,9 @@ impl Dns {
 
         weighted_records.sort();
 
-        if let Some(record) = weighted_records.first() {
-            return Ok((record.record.target().to_string(), record.record.port()));
-        }
-
-        err!(
-            ErrorKind::NotFound,
-            "Could not find any domains from the SRV query"
-        )
+        Ok(weighted_records
+            .into_iter()
+            .map(|srv| (srv.record.target().to_string(), srv.record.port()))
+            .collect())
     }
 }

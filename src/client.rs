@@ -31,10 +31,10 @@ impl Client {
         Ok(client)
     }
 
-    async fn handle_config_result(
+    async fn handle_config_result<'a>(
         &self,
         result: AutodiscoverResult,
-        mut request: AutodiscoverRequest,
+        mut request: AutodiscoverRequest<'a>,
     ) -> Result<AutodiscoverResponse> {
         match result {
             AutodiscoverResult::Ok(config) => Ok(config),
@@ -68,7 +68,7 @@ impl Client {
 
     #[async_recursion]
     /// Send an autodiscover request to an Exchange server.
-    pub async fn send_request<R: Into<AutodiscoverRequest> + Send>(
+    pub async fn send_request<'a, R: Into<AutodiscoverRequest<'a>> + Send>(
         &self,
         request: R,
     ) -> Result<AutodiscoverResponse> {
@@ -100,11 +100,12 @@ impl Client {
         return Ok(config);
     }
 
-    pub async fn dns_query<D: AsRef<str>>(&self, domain: D) -> Result<(String, u16)> {
-        let (fqdn, port) = self.dns.srv_lookup(domain).await?;
+    pub async fn dns_query<D: AsRef<str>>(&self, domain: D) -> Result<Vec<(String, u16)>> {
+        let results = self.dns.srv_lookup(domain).await?;
 
-        let domain_name = fqdn.trim_end_matches('.').to_string();
-
-        Ok((domain_name, port))
+        Ok(results
+            .into_iter()
+            .map(|(fqdn, port)| (fqdn.trim_end_matches('.').to_string(), port))
+            .collect())
     }
 }
