@@ -1,6 +1,5 @@
 use std::{error, fmt::Display, io::Error as IoError, result};
 
-use serde_xml_rs::Error as ParseXmlError;
 use surf::Error as SurfError;
 use trust_dns_resolver::error::ResolveError;
 
@@ -35,7 +34,7 @@ pub enum ErrorKind {
     BuildHttpClient,
     ConfigNotFound(Vec<Error>),
     Resolve(ResolveError),
-    ParseXml(ParseXmlError),
+    DeserializeXml(serde_xml_rs::Error),
     Surf(SurfError),
     Io(IoError),
 }
@@ -60,8 +59,8 @@ impl_from_error!(
     "Failed to create http request"
 );
 impl_from_error!(
-    ParseXmlError,
-    |err| ErrorKind::ParseXml(err),
+    serde_xml_rs::Error,
+    |err| ErrorKind::DeserializeXml(err),
     "An error while parsing the XML response"
 );
 impl_from_error!(

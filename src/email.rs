@@ -1,4 +1,4 @@
-use futures::future::select_ok;
+use futures::future::join_all;
 
 use log::warn;
 use validator::validate_email;
@@ -62,13 +62,13 @@ pub async fn from_email<E: AsRef<str>, P: AsRef<str>, U: AsRef<str>>(
         format!(
             "https://autodiscover.{}/autodiscover/autodiscover.{}",
             domain,
-            CandidateType::SOAP
+            Protocol::SOAP
         ),
         #[cfg(feature = "soap")]
         format!(
             "https://{}/autodiscover/autodiscover.{}",
             domain,
-            CandidateType::SOAP
+            Protocol::SOAP
         ),
         #[cfg(feature = "pox")]
         format!(
@@ -154,12 +154,14 @@ pub async fn from_email<E: AsRef<str>, P: AsRef<str>, U: AsRef<str>>(
         err!(ErrorKind::ConfigNotFound(errors), "No urls to request")
     }
 
-    let result = select_ok(futures).await;
+    let results = join_all(futures).await;
 
     // If any of the urls are a hit, we return it.
-    match result {
-        Ok((config, _remaining)) => return Ok(config),
-        Err(error) => errors.push(error),
+    for result in results {
+        match result {
+            Ok(config) => return Ok(config),
+            Err(error) => errors.push(error),
+        }
     }
 
     // If nothing return a valid configuration, we return an error.

@@ -8,10 +8,11 @@ use surf::Url;
 use super::pox::Autodiscover as PoxAutodiscover;
 
 use super::response::AutodiscoverResult;
-use crate::error::{err, ErrorKind, Result};
+use crate::error::Result;
 
 pub enum Protocol {
-    // SOAP,
+    #[cfg(feature = "soap")]
+    SOAP,
     #[cfg(feature = "pox")]
     POX,
 }
@@ -27,8 +28,10 @@ impl Protocol {
     pub fn file_extension(&self) -> String {
         let ext = match self {
             #[cfg(feature = "pox")]
-            Protocol::POX => "xml",
-            // CandidateType::SOAP => "svc",
+            Self::POX => "xml",
+            #[cfg(feature = "soap")]
+            Self::SOAP => "svc",
+            #[cfg(all(not(feature = "soap"), not(feature = "pox")))]
             _ => "",
         };
 
@@ -52,9 +55,11 @@ impl Protocol {
 
     pub fn from_ext<E: AsRef<str>>(ext: E) -> Option<Self> {
         match ext.as_ref() {
-            // "svc" => Some(Self::SOAP),
+            #[cfg(feature = "soap")]
+            "svc" => Some(Self::SOAP),
             #[cfg(feature = "pox")]
             "xml" => Some(Self::POX),
+
             _ => None,
         }
     }
@@ -73,6 +78,9 @@ impl Protocol {
 
                 Ok(buf.into())
             }
+            #[cfg(feature = "soap")]
+            Protocol::SOAP => Ok(Bytes::new()),
+            #[cfg(all(not(feature = "soap"), not(feature = "pox")))]
             _ => Ok(Bytes::new()),
         }
     }
@@ -82,19 +90,24 @@ impl Protocol {
 
         match &self {
             #[cfg(feature = "pox")]
-            Protocol::POX => {
+            Self::POX => {
                 let config = PoxAutodiscover::from_xml(reader)?;
 
                 Ok(config.into())
-            } // CandidateType::SOAP => {
-            //     let config: SoapConfig = serde_xml_rs::from_reader(xml)?;
+            }
+            #[cfg(feature = "soap")]
+            Self::SOAP => {
+                unimplemented!()
+            }
+            #[cfg(all(not(feature = "soap"), not(feature = "pox")))]
+            _ => {
+                use crate::error::{err, ErrorKind};
 
-            //     Ok(config.into())
-            // }
-            _ => err!(
-                ErrorKind::InvalidProtocol,
-                "There is valid protocol to handle the response"
-            ),
+                err!(
+                    ErrorKind::InvalidProtocol,
+                    "There is valid protocol to handle the response"
+                )
+            }
         }
     }
 }
