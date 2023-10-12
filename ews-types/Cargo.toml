@@ -1,0 +1,13 @@
+[package]
+name = "ews-types"
+version = "0.1.0"
+edition = "2021"
+
+# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
+
+[dependencies]
+async-trait = "0.1.73"
+log = "0.4.20"
+reqwest = "0.11.22"
+yaserde = "0.8"
+yaserde_derive = "0.8"
