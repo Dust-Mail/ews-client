@@ -43,7 +43,7 @@ jobs:
         run: cargo build
 
       - name: Create env file
-        run: touch .env
+        run: touch ews-client/.env
 
       - name: Test Tokio
         run: cargo test --no-default-features --features runtime-tokio pox

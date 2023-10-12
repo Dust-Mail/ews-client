@@ -1,0 +1,39 @@
+[package]
+name = "ews-client"
+version = "0.3.3"
+edition = "2021"
+
+# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
+
+rust-version = "1.67"
+description = "An implementation of the Microsoft autodiscover protocol for Exchange"
+license = "MIT"
+
+[features]
+default = ["pox", "runtime-tokio"]
+pox = []
+soap = []
+
+runtime-tokio = []
+runtime-async-std = ["dep:async-std-resolver"]
+
+[dependencies]
+async-recursion = "1.0.4"
+bytes = "1.4.0"
+futures = "0.3.28"
+log = "0.4.19"
+serde = { version = "1.0.183", features = ["derive"] }
+serde-xml-rs = "0.6.0"
+trust-dns-resolver = "0.22.0"
+async-std-resolver = { version = "0.22.0", optional = true }
+validator = { version = "0.16" }
+ews-types = { path = "../ews-types" }
+surf = "2.3.2"
+base64 = "0.21.2"
+
+[dev-dependencies]
+dotenv = "0.15.0"
+env_logger = "0.10.0"
+
+tokio = { version = "1.0", features = ["full"] }
+async-std = { version = "1.12.0", features = ["attributes"] }
